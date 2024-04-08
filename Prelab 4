@@ -4,7 +4,7 @@
 //main.c
 //Proyecto: Prelab4
 //Hardware: ATMEGA328P
-//Created: 2/14/2024
+//Created: 04/08/2024
 //Author : Juan Luis Monzón
 //********************************************************************************************************************************************
 
@@ -28,8 +28,8 @@
 
 void setup(void);
 void intc(void);
-void incrementar(void);
-void decrementar(void);
+void inc(void);
+void dec(void);
 
 //********************************************************************************************************************************************
 // MAIN
@@ -70,10 +70,10 @@ ISR(PCINT1_vect){
 	uint8_t bttnD = PINC & (1 << PINC5);
 	
 	if (bttnI == 0){
-		incrementar();
+		inc();
 	}
 	else if (bttnD == 0){
-		decrementar();
+		dec();
 	}
 	
 	PCIFR |= (1 << PCIF1);
@@ -88,10 +88,10 @@ void intc(void){
 	PCMSK1 |= (1 << PCINT12) | (1 << PCINT13);
 }
 
-void incrementar(void){
+void inc(void){
 	contador++;
 }
 
-void decrementar(void){
+void dec(void){
 	contador--;
 }
