@@ -1,0 +1,150 @@
+//*******************************************************************************************************************************************
+//Universidad del Valle de Guatemala
+//IE2023 Programación de Microcontroladores
+//main.c
+//Proyecto: LAB 4
+//Hardware: ATMEGA328P
+//Created: 04/09/2024
+//Author : Juan Luis Monzón Catalán
+//********************************************************************************************************************************************
+
+//********************************************************************************************************************************************
+// LIBRERIAS
+//********************************************************************************************************************************************
+
+#define F_CPU 16000000
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+
+//********************************************************************************************************************************************
+// V.G
+//********************************************************************************************************************************************
+ uint8_t contador = 0;
+ uint8_t dece = 0;
+ uint8_t unid = 0;
+ uint8_t display = 0;
+ 
+ const uint8_t lista_D[] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71};
+
+//********************************************************************************************************************************************
+// DECLARACIÓN DE FUNCIONES
+//********************************************************************************************************************************************
+
+void setup(void);
+void intc(void);
+void inc(void);
+void dec(void);
+void SADC(void);
+
+//********************************************************************************************************************************************
+// MAIN
+//********************************************************************************************************************************************
+
+int main(void)
+{
+    setup();																//SALTAR AL SETUP
+    while (1) 
+    {	
+		ADCSRA |= (1 << ADSC);												//COMENZAR LA CONVERCIÓN
+		
+		//REALIZAMOS UNA COMPARACIÓN DEL VALOR DEL DISPLAY CON EL DE LA ALARMA
+		if (display > contador){
+			PORTD |= (1 << PORTD7);
+		}
+		else {
+			PORTD &= ~(1 << PORTD7);
+		}
+
+		PORTB &= ~(1 << PORTB5);
+		PORTD = (lista_D[unid]) | (PORTD & 0x80);							//SACAR EL VALOR DE UNIDADES EN LOS DISPLAYS
+		PORTB |= (1 << PORTB4);
+		_delay_ms(10) ;
+		PORTB &= ~(1 << PORTB4);
+		PORTD = (lista_D[dece]) | (PORTD & 0x80);							//SACAR EL VALOR DE DECENAS EN LOS DISPLAYS
+		PORTB |= (1 << PORTB5);
+		_delay_ms(10);
+		
+		PORTC = ((contador & 0xF0) >> 4) | (PORTC & 0xF0);
+		PORTB = (PORTB & 0xF0) | (contador & 0x0F);
+    }
+}
+
+//********************************************************************************************************************************************
+// SETUP
+//********************************************************************************************************************************************
+
+void setup(void){
+	DDRC &= ~((1 << DDC4) | (1 << DDC5));									//USAMOS PC4 Y PC5 PARA LOS PUSHBOTTOMS
+	PORTC |= (1 << PORTC5) | (1 << PORTC4);
+	
+	//PARTIMOS LOS LEDS EN GRUPOS DE 4, SIMULANDO LA PARTICIÓN DE UN BYTE EN 2 NIBBLES
+	DDRB |= (1 << DDB0) | (1 << DDB1) | (1 << DDB2) | (1 << DDB3);			//PARTIMOS PUERTO B Y USAMOS ESTOS PINES PARA EL PRIMER NIBBLE DEL CONTEO
+	DDRC |= (1 << DDC0) | (1 << DDC1) | (1 << DDC2) | (1 << DDC3);			//UTILIZAMOS EL RESTO DE PINES DEL PUERTO C PARA EL SEGUNDO NIBBLE
+	
+	DDRB |= (1 << DDB4) | (1 << DDB5);										//UTILIZAMOS PB4 Y PB5 PARA LOS TRANSISTORES DE LOS DISPLAYS
+	
+	//UTILIZAMOS EL PUERTO D PARA LOS DISPLAYS
+	DDRD |= (1 << DDD0)	| (1 << DDD1) | (1 << DDD2)	| (1 << DDD3) | (1 << DDD4)	| (1 << DDD5) | (1 << DDD6);
+	
+	//UTILIZAMOS EL PD7 PARA CONECTAR LA ALARMA
+	DDRD |= (1 << DDD7);
+	
+	SADC();
+	intc();
+	sei();																	//ACTIVAR LAS INTERRUPCIONES GLOBALES
+}
+
+//********************************************************************************************************************************************
+// INTERRUPCIONES
+//********************************************************************************************************************************************
+
+ISR(PCINT1_vect){
+	uint8_t bttnI = PINC & (1 << PINC4);									//ASIGNAR EL VALOR DE UN PUSHBOTTOM (INCREMENTAR) A UNA VARIABLE
+	uint8_t bttnD = PINC & (1 << PINC5);									//ASIGNAR EL VALOR DE UN PUSHBOTTOM (DECREMENTAR) A UNA VARIABLE
+	
+	if (bttnI == 0){
+		inc();																//SI EL VALOR DE LA VARIABLE ES 0 INCREMENTAR
+	}
+	else if (bttnD == 0){													//SI EL VALOR DE LA VARIABLE ES 0 DECREMENTAR
+		dec();
+	}
+	
+	PCIFR |= (1 << PCIF1);													//APAGAR LA BANDERA DEL PINCHANGE
+}
+
+ISR(ADC_vect){
+	unid = ADCH & 0x0F;														//LIMPIAR EL NIBBLE DE LA DERECHA PARA SOLO SACAR EL PRIMER NIBBLE (UNIDADES)
+	dece = (ADCH & 0xF0) >> 4;												//LIMPIAR EL SEGUNDO NIBBLE PARA SACAR LOS VALORES DE LAS DECENAS
+	display = ADCH;
+	
+	ADCSRA |= (1 << ADIF);													//APAGRA LA BANDERA DEL ADC
+}
+
+//********************************************************************************************************************************************
+// SUBFUNCIONES
+//********************************************************************************************************************************************
+
+void intc(void){
+	PCICR |= (1<<PCIE1);													//ACTIVAMOS LA INTERRUPCIÓN DEL PINCHANGE
+	PCMSK1 |= (1 << PCINT12) | (1 << PCINT13);
+}
+
+void inc(void){
+	contador++;
+}
+
+void dec(void){
+	contador--;
+}
+
+void SADC(void){
+	
+	ADMUX |= (1 << REFS0);													//ACTIVAMOS EL PIN PATA UTILIZAR 5V COMO VALOR DE REFERENCIA EN VCC
+	ADMUX |= (1 << ADLAR);													//SETEAMOS ADLAR EN UNO PARA UTILIZAR LA JUSTIFICACIÓN A LA IZQUIERDA
+	ADMUX |= (1 << MUX1) | (1 << MUX2);										//SETEAMOS LOS REGISTROS PARA UTILIZAR EL ADC6 (A6)
+	
+	ADCSRA |= (1 << ADEN);													//ENCENDEMOS EL ADC
+	ADCSRA |= (1 << ADIE);													//ACTIVAMOS LA INTERRUPCIÓN DEL ADC
+	ADCSRA |= (1 << ADPS0) | (1 << ADPS1) | (1 << ADPS2);					//SETEAMOS LOS BITS PARA TENER UN PRESCALER DE 128
+}
